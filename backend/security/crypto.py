@@ -15,6 +15,16 @@ def generate_access_key() -> str:
 
 
 def derive_file_signature(file_bytes: bytes) -> str:
+    size = len(file_bytes)
+    if size > 1 * 1024 * 1024:  # > 1 MB
+        # Deterministically sample from the beginning, middle, and end, plus the file size
+        sample = (
+            file_bytes[:512 * 1024]
+            + file_bytes[size // 2 : size // 2 + 256 * 1024]
+            + file_bytes[-256 * 1024 :]
+            + str(size).encode("utf-8")
+        )
+        return sha256_hex(sample)
     return sha256_hex(file_bytes)
 
 

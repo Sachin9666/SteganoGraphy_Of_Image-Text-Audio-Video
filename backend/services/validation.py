@@ -21,7 +21,7 @@ async def validate_uploaded_file(upload: UploadFile, modality: str) -> Validated
 
     policy = settings.policies[modality]
     suffix = Path(upload.filename or "").suffix.lower()
-    if suffix not in policy.allowed_extensions:
+    if modality != "secret" and suffix not in policy.allowed_extensions:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file extension {suffix or '[missing]'} for {modality}",
