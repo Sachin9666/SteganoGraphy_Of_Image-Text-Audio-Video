@@ -1,8 +1,16 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routes import decode, encode, jobs
+from backend.routes import auth, decode, encode, jobs
 from backend.services.queue_manager import queue_manager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await queue_manager.start()
+    yield
+    await queue_manager.stop()
 
 
 def create_app() -> FastAPI:
@@ -13,6 +21,7 @@ def create_app() -> FastAPI:
             "Production-oriented API for key-bound steganography across image, audio, "
             "video, and text modalities."
         ),
+        lifespan=lifespan,
     )
 
     app.add_middleware(
@@ -23,17 +32,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(auth.router, prefix="/api")
     app.include_router(encode.router, prefix="/api")
     app.include_router(decode.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
-
-    @app.on_event("startup")
-    async def startup_event() -> None:
-        await queue_manager.start()
-
-    @app.on_event("shutdown")
-    async def shutdown_event() -> None:
-        await queue_manager.stop()
 
     @app.get("/health")
     async def health() -> dict:
@@ -46,4 +48,5 @@ def create_app() -> FastAPI:
     return app
 
 
+# Trigger reload comment
 app = create_app()

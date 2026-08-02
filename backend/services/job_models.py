@@ -7,6 +7,7 @@ class JobRecord:
     job_id: str
     job_type: str
     modality: str
+    user_id: Optional[str] = None
     status: str = "queued"
     progress: int = 0
     stage: str = "queued"
@@ -19,10 +20,22 @@ class JobRecord:
     integrity_hash: Optional[str] = None
     device_info: Optional[dict] = None
     metadata: dict = field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     def to_response(self) -> dict:
+        import os
+        size_bytes = 0
+        if self.output_path and os.path.exists(self.output_path):
+            try:
+                size_bytes = os.path.getsize(self.output_path)
+            except OSError:
+                pass
+
         return {
             "job_id": self.job_id,
+            "job_type": self.job_type,
+            "modality": self.modality,
             "status": self.status,
             "progress": self.progress,
             "stage": self.stage,
@@ -32,4 +45,7 @@ class JobRecord:
             "access_key": self.access_key,
             "integrity_hash": self.integrity_hash,
             "device_info": self.device_info,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "output_size": size_bytes,
         }

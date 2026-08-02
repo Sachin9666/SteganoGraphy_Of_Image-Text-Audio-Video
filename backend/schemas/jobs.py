@@ -17,6 +17,8 @@ class DeviceInfo(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str
+    job_type: str
+    modality: str
     status: Literal["queued", "running", "completed", "failed"]
     progress: int = Field(ge=0, le=100)
     stage: str
@@ -26,3 +28,6 @@ class JobStatusResponse(BaseModel):
     access_key: Optional[str] = None
     integrity_hash: Optional[str] = None
     device_info: Optional[DeviceInfo] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    output_size: Optional[int] = None
