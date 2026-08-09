@@ -22,6 +22,25 @@ async def get_my_jobs(current_user: dict = Depends(get_current_user)) -> list[Jo
     return [JobStatusResponse.model_validate(record.to_response()) for record in records]
 
 
+@router.delete("/jobs/me")
+async def clear_my_jobs(current_user: dict = Depends(get_current_user)) -> dict:
+    cursor = conn.cursor()
+    # Delete physical output files if they exist
+    rows = cursor.execute("SELECT output_path FROM jobs WHERE user_id = ?", (current_user["id"],)).fetchall()
+    for row in rows:
+        path = row["output_path"]
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    
+    # Delete database job records
+    cursor.execute("DELETE FROM jobs WHERE user_id = ?", (current_user["id"],))
+    conn.commit()
+    return {"status": "success", "message": "All jobs cleared successfully"}
+
+
 @router.get("/jobs/metrics")
 async def get_jobs_metrics(current_user: dict = Depends(get_current_user)) -> dict:
     cursor = conn.cursor()
@@ -86,7 +105,7 @@ async def get_jobs_metrics(current_user: dict = Depends(get_current_user)) -> di
 
     return {
         "storage_used": total_bytes,
-        "storage_total": 500 * 1024 * 1024 * 1024, # 500 GB
+        "storage_total": 50 * 1024 * 1024 * 1024, # 50 GB
         "file_count": file_count,
         "latency": latency_str,
         "throughput": throughput_val,

@@ -1,26 +1,37 @@
 import React from "react";
 import { SvgIcons } from "./SvgIcons";
 
-export function LandingView({ currentUser, onNavigate }) {
+export function LandingView({ currentUser, onNavigate, onOpenDocs, onOpenPricing }) {
   return (
     <div className="landing-page-container">
       {/* SteganOS Header */}
       <header className="landing-header">
         <div className="landing-header-logo" onClick={() => onNavigate("landing")}>
-          <div className="logo-shield-wrapper">
-            <SvgIcons.Shield size={24} />
-          </div>
-          <span>SteganOS</span>
+          <img src="/logo.png" alt="StegoVault Logo" style={{ width: "32px", height: "32px", objectFit: "contain" }} />
+          <span>StegoVault</span>
         </div>
         <nav className="landing-header-nav">
           <a href="#platform" onClick={(e) => { e.preventDefault(); onNavigate(currentUser ? "dashboard" : "login"); }}>Platform</a>
           <a href="#features" onClick={(e) => { e.preventDefault(); document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }); }}>Features</a>
-          <a href="#docs" onClick={(e) => { e.preventDefault(); alert("Documentation: Luminous Sentinel Engine v2.4 protocols."); }}>Documentation</a>
-          <a href="#pricing" onClick={(e) => { e.preventDefault(); alert("Pricing: Free community version active."); }}>Pricing</a>
+          <a href="#docs" onClick={(e) => { e.preventDefault(); onOpenDocs(); }}>Documentation</a>
+          <a href="#pricing" onClick={(e) => { e.preventDefault(); onOpenPricing(); }}>Pricing</a>
         </nav>
-        <button className="btn-get-started" onClick={() => onNavigate(currentUser ? "dashboard" : "login")}>
-          {currentUser ? "Go to Dashboard" : "Get Started"}
-        </button>
+        <div className="landing-header-actions">
+          {currentUser ? (
+            <button className="btn-get-started" onClick={() => onNavigate("dashboard")}>
+              Go to Dashboard
+            </button>
+          ) : (
+            <>
+              <button className="btn-nav-login" onClick={() => onNavigate("login")}>
+                Login
+              </button>
+              <button className="btn-get-started" onClick={() => onNavigate("register")}>
+                Sign Up
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       {/* Hero Section */}
@@ -50,7 +61,7 @@ export function LandingView({ currentUser, onNavigate }) {
         </div>
         <div className="hero-right">
           <div className="glowing-card">
-            <img src="/hero_face.png" alt="SteganOS AI Neural Camouflage Visual" className="hero-img" />
+            <img src="/hero_face.png" alt="StegoVault AI Neural Camouflage Visual" className="hero-img" />
             
             <div className="status-overlay-top">
               <span className="status-dot"></span>
@@ -145,20 +156,20 @@ export function LandingView({ currentUser, onNavigate }) {
       <footer className="landing-footer-new">
         <div className="footer-brand-section">
           <div className="footer-logo">
-            <SvgIcons.Shield size={24} />
-            <span>SteganOS</span>
+            <img src="/logo.png" alt="StegoVault Logo" style={{ width: "32px", height: "32px", objectFit: "contain" }} />
+            <span>StegoVault</span>
           </div>
           <p className="footer-desc">
             Building the invisible future of data security. Clinical precision, neural-grade protection.
           </p>
           <p className="footer-copy">
-            © 2024 SteganOS Security Labs. All rights reserved.
+            © 2026 StegoVault Security Labs. All rights reserved.
           </p>
         </div>
         <div className="footer-links-grid">
           <div className="footer-column">
             <h4>COMPANY</h4>
-            <a href="#about" onClick={(e) => { e.preventDefault(); alert("SteganOS Security Labs: Pioneers in modern neural shielding."); }}>About</a>
+            <a href="#about" onClick={(e) => { e.preventDefault(); alert("StegoVault Security Labs: Pioneers in modern neural shielding."); }}>About</a>
             <a href="#careers" onClick={(e) => { e.preventDefault(); alert("No current openings. Check back soon!"); }}>Careers</a>
             <a href="#blog" onClick={(e) => { e.preventDefault(); alert("Read our security articles on medium."); }}>Blog</a>
           </div>
@@ -166,7 +177,7 @@ export function LandingView({ currentUser, onNavigate }) {
             <h4>LEGAL</h4>
             <a href="#privacy" onClick={(e) => { e.preventDefault(); alert("Your data is handled locally. Review policy in system config."); }}>Privacy Policy</a>
             <a href="#terms" onClick={(e) => { e.preventDefault(); alert("Term of service: Operational use is fully private."); }}>Terms of Service</a>
-            <a href="#disclosure" onClick={(e) => { e.preventDefault(); alert("Responsible disclosure: security@steganos.io"); }}>Security Disclosure</a>
+            <a href="#disclosure" onClick={(e) => { e.preventDefault(); alert("Responsible disclosure: security@stegovault.io"); }}>Security Disclosure</a>
           </div>
           <div className="footer-column">
             <h4>SUPPORT</h4>

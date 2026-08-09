@@ -72,6 +72,22 @@ pip install -r requirements.txt
 uvicorn backend.main:app --reload
 ```
 
+#### Windows Application Control Policy Workaround
+
+If you encounter a warning that PyTorch is blocked or unavailable due to Windows Application Control policies (`[WinError 4551] An Application Control policy has blocked this file` when loading `c10.dll`), run the elevated setup script to create a trusted virtual environment in `C:\Program Files`:
+
+1. Open PowerShell **as Administrator**.
+2. Run the setup script:
+   ```powershell
+   Set-ExecutionPolicy Bypass -Scope Process
+   .\setup_trusted_env.ps1
+   ```
+3. Run the backend using the trusted environment:
+   ```powershell
+   & "C:\Program Files\stego-env\Scripts\python.exe" -m uvicorn backend.main:app --reload
+   ```
+
+
 ### Frontend
 
 ```bash

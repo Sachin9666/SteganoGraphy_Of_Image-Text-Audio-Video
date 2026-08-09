@@ -1,14 +1,32 @@
 from io import BytesIO
 
 import numpy as np
-import torch
 from PIL import Image
 
-from ml_models.models import AutoStegaLLM, DWTSwinTransformer, MultiscaleAttentionCNN, TwoStageDepthBalancedGAN
+try:
+    import torch
+except Exception as exc:  # pragma: no cover - exercised when torch is unavailable
+    torch = None
+    _torch_error = exc
+else:
+    _torch_error = None
 
 
 class MultiModalInferenceService:
     def __init__(self) -> None:
+        self.image_model = None
+        self.audio_model = None
+        self.video_model = None
+        self.text_model = None
+        self.unavailable_reason = _torch_error
+        self._load_models()
+
+    def _load_models(self) -> None:
+        if torch is None:
+            return
+
+        from ml_models.models import AutoStegaLLM, DWTSwinTransformer, MultiscaleAttentionCNN, TwoStageDepthBalancedGAN
+
         self.image_model = TwoStageDepthBalancedGAN().eval()
         self.audio_model = DWTSwinTransformer().eval()
         self.video_model = MultiscaleAttentionCNN().eval()
@@ -16,7 +34,7 @@ class MultiModalInferenceService:
 
     async def encode(self, modality: str, cover_bytes: bytes, secret_bytes: bytes, runtime, embedding_type: str = "adaptive") -> bytes:
         import asyncio
-        if embedding_type == "fast":
+        if embedding_type == "fast" or self.unavailable_reason is not None:
             return cover_bytes
         if modality == "image":
             return await asyncio.to_thread(self._encode_image, cover_bytes, runtime.device, runtime.mixed_precision)

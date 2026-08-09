@@ -22,11 +22,47 @@ export function DecodingView({
   job,
   error,
   recentActivity,
+  myJobs = [],
   isSubmitting,
   showToast
 }) {
   const [stegoInputMode, setStegoInputMode] = useState("upload");
   const [pastedStegoText, setPastedStegoText] = useState("");
+
+  const decodeOps = myJobs && myJobs.length > 0
+    ? myJobs
+        .filter(job => job.job_type === "decode")
+        .map(job => {
+          let timeStr = "";
+          try {
+            if (job.updated_at) {
+              const date = new Date(job.updated_at + "Z");
+              timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            }
+          } catch (e) {
+            timeStr = job.updated_at || "";
+          }
+          return {
+            id: job.job_id,
+            name: job.metadata?.input_name || job.output_name || "Stego Carrier",
+            status: job.status,
+            timestamp: timeStr || "Just now",
+            modality: job.modality || "image",
+            size: job.metadata?.input_size || 0
+          };
+        })
+    : recentActivity
+        ? recentActivity
+            .filter(act => act.type === "decode")
+            .map(op => ({
+              id: op.id,
+              name: op.name,
+              status: op.status,
+              timestamp: op.timestamp,
+              modality: op.modality || "image",
+              size: op.size || 0
+            }))
+        : [];
 
   const toggleStegoMode = (mode) => {
     setStegoInputMode(mode);
@@ -222,68 +258,19 @@ export function DecodingView({
               </tr>
             </thead>
             <tbody>
-              {/* Mock records */}
-              <tr>
-                <td>
-                  <div className="file-name-col">
-                    <div className="file-avatar">
-                      <SvgIcons.Image />
-                    </div>
-                    <div>
-                      <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>DSC_0042.jpg</span>
-                      <div className="file-name-meta">4.2 MB • Image/JPEG</div>
-                    </div>
-                  </div>
-                </td>
-                <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem" }}>Cyber-Vision v4.2</td>
-                <td>
-                  <span className="status-pill success">Success</span>
-                </td>
-                <td>12 mins ago</td>
-                <td>
-                  <button type="button" className="btn-view-report" onClick={() => showToast("Report: Decryption analysis matches neural carrier profiles. Signature matches SHA256 seals.", "info")}>
-                    View Report
-                  </button>
-                </td>
-              </tr>
-
-              <tr>
-                <td>
-                  <div className="file-name-col">
-                    <div className="file-avatar">
-                      <SvgIcons.Audio />
-                    </div>
-                    <div>
-                      <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>ambient_record.wav</span>
-                      <div className="file-name-meta">12.8 MB • Audio/WAV</div>
-                    </div>
-                  </div>
-                </td>
-                <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem" }}>Deep-Spectral Probe</td>
-                <td>
-                  <span className="status-pill no-hidden">No Hidden Data</span>
-                </td>
-                <td>2 hours ago</td>
-                <td>
-                  <button type="button" className="topbar-icon-btn" onClick={() => showToast("Options configuration context under assembly.", "info")}>
-                    ⋮
-                  </button>
-                </td>
-              </tr>
-
-              {/* Dynamic completed activities */}
-              {recentActivity
-                .filter(act => act.type === "decode")
-                .map((op) => (
+              {decodeOps.length > 0 ? (
+                decodeOps.map((op) => (
                   <tr key={op.id}>
                     <td>
                       <div className="file-name-col">
                         <div className="file-avatar">
-                          {op.modality === "image" ? <SvgIcons.Image /> : op.modality === "audio" ? <SvgIcons.Audio /> : <SvgIcons.Video />}
+                          {op.modality === "audio" ? <SvgIcons.Audio /> : op.modality === "video" ? <SvgIcons.Video /> : <SvgIcons.Image />}
                         </div>
                         <div>
                           <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{op.name}</span>
-                          <div className="file-name-meta">{formatBytes(op.size)} • {op.modality.toUpperCase()}</div>
+                          <div className="file-name-meta">
+                            {op.size ? formatBytes(op.size) : "Unknown Size"} • {op.modality.toUpperCase()}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -291,18 +278,29 @@ export function DecodingView({
                       {detectionModel === "cyber-vision" ? "Cyber-Vision v4.2" : "Deep-Spectral Probe"}
                     </td>
                     <td>
-                      <span className={`status-pill ${op.status === "completed" ? "success" : "failed"}`}>
-                        {op.status === "completed" ? "Success" : "Failed"}
+                      <span className={`status-pill ${op.status === "completed" || op.status === "success" ? "success" : "failed"}`}>
+                        {op.status === "completed" || op.status === "success" ? "Success" : "Failed"}
                       </span>
                     </td>
                     <td>{op.timestamp}</td>
                     <td>
-                      <button type="button" className="btn-view-report" onClick={() => showToast(`Job report: ID #${op.id} has completed with status: ${op.status}.`, "info")}>
+                      <button
+                        type="button"
+                        className="btn-view-report"
+                        onClick={() => showToast(`Job report: ID #${op.id} has completed with status: ${op.status}.`, "info")}
+                      >
                         View Report
                       </button>
                     </td>
                   </tr>
-                ))}
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                    No decoding operations recorded
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -39,7 +39,7 @@ export function DashboardView({ serverHealth, recentActivity, myJobs = [], metri
           timestamp: act.timestamp,
           modality: act.modality
         }))
-      : defaultOperations;
+      : [];
 
   return (
     <div className="dashboard-grid">
@@ -110,27 +110,35 @@ export function DashboardView({ serverHealth, recentActivity, myJobs = [], metri
                 </tr>
               </thead>
               <tbody>
-                {displayOps.slice(0, 4).map((op) => (
-                  <tr key={op.id}>
-                    <td>
-                      <span className="ops-id-link">#{op.id.slice(0, 10)}</span>
-                    </td>
-                    <td>
-                      <div className="ops-type-cell">
-                        {op.type === "encode" ? <SvgIcons.Lock /> : <SvgIcons.Key />}
-                        <span>{op.type === "encode" ? "Encoding" : "Decoding"}</span>
-                      </div>
-                    </td>
-                    <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {op.name}
-                    </td>
-                    <td>
-                      <span className={`status-pill ${op.status}`}>
-                        {op.status}
-                      </span>
+                {displayOps.length > 0 ? (
+                  displayOps.slice(0, 4).map((op) => (
+                    <tr key={op.id}>
+                      <td>
+                        <span className="ops-id-link">#{op.id.slice(0, 10)}</span>
+                      </td>
+                      <td>
+                        <div className="ops-type-cell">
+                          {op.type === "encode" ? <SvgIcons.Lock /> : <SvgIcons.Key />}
+                          <span>{op.type === "encode" ? "Encoding" : "Decoding"}</span>
+                        </div>
+                      </td>
+                      <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {op.name}
+                      </td>
+                      <td>
+                        <span className={`status-pill ${op.status}`}>
+                          {op.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                      No operations recorded
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -308,7 +316,7 @@ export function DashboardView({ serverHealth, recentActivity, myJobs = [], metri
           </div>
 
           <div className="vault-capacity-detail">
-            {metrics ? (metrics.storage_used / (1024 * 1024)).toFixed(2) : "0.00"} MB Used // 500 GB Total
+            {metrics ? (metrics.storage_used / (1024 * 1024)).toFixed(2) : "0.00"} MB Used // 50 GB Total
           </div>
 
           <div className="vault-grid-info">
