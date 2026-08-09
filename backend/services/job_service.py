@@ -22,11 +22,19 @@ from backend.services.model_runtime import get_runtime_profile
 from backend.services.queue_manager import queue_manager
 from backend.services.storage import build_storage_path
 from backend.services.validation import ValidatedUpload
-from ml_models.inference import MultiModalInferenceService
 from backend.services.quality_enhancement import enhance_media
 
 jobs: dict[str, JobRecord] = {}
-model_service = MultiModalInferenceService()
+model_service = None
+
+
+def _get_model_service():
+    global model_service
+    if model_service is None:
+        from ml_models.inference import MultiModalInferenceService
+
+        model_service = MultiModalInferenceService()
+    return model_service
 
 
 def get_job(job_id: str) -> JobRecord | None:
@@ -223,7 +231,13 @@ async def _run_encode_job(record: JobRecord, cover_bytes: bytes, cover_name: str
         _store_job_record(record)
 
         embedding_type = record.metadata.get("embedding_type", "adaptive")
-        processed_cover = await model_service.encode(record.modality, cover_bytes, secret_bytes, runtime, embedding_type)
+        processed_cover = await _get_model_service().encode(
+            record.modality,
+            cover_bytes,
+            secret_bytes,
+            runtime,
+            embedding_type,
+        )
 
         record.progress = 70
         record.stage = "securing"

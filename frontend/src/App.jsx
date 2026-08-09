@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { createDecodeJob, createEncodeJob, fetchHealth, fetchJob, fetchMetrics, clearAuthToken, fetchCurrentUser, fetchMyJobs, loginUser, registerUser, setAuthToken } from "./api";
+import { createDecodeJob, createEncodeJob, fetchHealth, fetchJob, fetchMetrics, clearAuthToken, fetchCurrentUser, fetchMyJobs, loginUser, registerUser, setAuthToken, clearMyJobs } from "./api";
 import { FILE_LIMITS, SECRET_LIMITS } from "./config";
 
 import { formatBytes } from "./utils/helpers";
@@ -20,6 +20,26 @@ export default function App() {
     return !!token && !user;
   });
   const [activeView, setActiveView] = useState(() => {
+    const path = window.location.pathname.toLowerCase();
+    if (path === "/login" || path.endsWith("/login")) {
+      return "login";
+    }
+    if (path === "/register" || path.endsWith("/register")) {
+      return "login";
+    }
+    if (path === "/dashboard" || path.endsWith("/dashboard")) {
+      return "dashboard";
+    }
+    if (path === "/vault" || path.endsWith("/vault")) {
+      return "vault";
+    }
+    if (path === "/encoding" || path.endsWith("/encoding")) {
+      return "encoding";
+    }
+    if (path === "/decoding" || path.endsWith("/decoding")) {
+      return "decoding";
+    }
+
     const token = localStorage.getItem("stegano_access_token");
     if (token) {
       const saved = localStorage.getItem("stegano_active_view");
@@ -45,6 +65,7 @@ export default function App() {
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [showDocModal, setShowDocModal] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
   const [docActiveTab, setDocActiveTab] = useState("Overview");
   const [toast, setToast] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -60,6 +81,75 @@ export default function App() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  // Keyboard-based zoom custom controller (Ctrl + / - / 0)
+  useEffect(() => {
+    const handleZoomKeyDown = (e) => {
+      if (e.ctrlKey) {
+        if (e.key === "=" || e.key === "+") {
+          e.preventDefault();
+          const currentZoom = parseFloat(localStorage.getItem("app_zoom") || "1");
+          const nextZoom = Math.min(currentZoom + 0.1, 1.5);
+          localStorage.setItem("app_zoom", nextZoom.toString());
+          document.body.style.zoom = nextZoom;
+          document.documentElement.style.setProperty("--zoom-factor", nextZoom.toString());
+          showToast(`Zoom level: ${Math.round(nextZoom * 100)}%`, "info");
+        } else if (e.key === "-") {
+          e.preventDefault();
+          const currentZoom = parseFloat(localStorage.getItem("app_zoom") || "1");
+          const nextZoom = Math.max(currentZoom - 0.1, 0.7);
+          localStorage.setItem("app_zoom", nextZoom.toString());
+          document.body.style.zoom = nextZoom;
+          document.documentElement.style.setProperty("--zoom-factor", nextZoom.toString());
+          showToast(`Zoom level: ${Math.round(nextZoom * 100)}%`, "info");
+        } else if (e.key === "0") {
+          e.preventDefault();
+          localStorage.setItem("app_zoom", "1");
+          document.body.style.zoom = "1";
+          document.documentElement.style.setProperty("--zoom-factor", "1");
+          showToast("Zoom level reset to 100%", "info");
+        }
+      }
+    };
+
+    const savedZoom = localStorage.getItem("app_zoom");
+    if (savedZoom) {
+      document.body.style.zoom = savedZoom;
+      document.documentElement.style.setProperty("--zoom-factor", savedZoom);
+    }
+
+    window.addEventListener("keydown", handleZoomKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleZoomKeyDown);
+    };
+  }, []);
+
+  // Listen for browser Back/Forward navigation popstate events
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.toLowerCase();
+      if (path === "/login" || path.endsWith("/login")) {
+        setAuthMode("login");
+        setActiveView("login");
+      } else if (path === "/register" || path.endsWith("/register")) {
+        setAuthMode("register");
+        setActiveView("login");
+      } else if (path === "/dashboard" || path.endsWith("/dashboard")) {
+        setActiveView("dashboard");
+      } else if (path === "/vault" || path.endsWith("/vault")) {
+        setActiveView("vault");
+      } else if (path === "/encoding" || path.endsWith("/encoding")) {
+        setActiveView("encoding");
+      } else if (path === "/decoding" || path.endsWith("/decoding")) {
+        setActiveView("decoding");
+      } else {
+        setActiveView("landing");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const dropdownTimeoutRef = useRef(null);
 
   const handleDropdownMouseEnter = () => {
@@ -85,20 +175,24 @@ export default function App() {
       setAuthMode("login");
       setActiveView("login");
       setAuthError("");
+      window.history.pushState(null, "", "/login");
       return;
     }
     if (view === "register") {
       setAuthMode("register");
       setActiveView("login");
       setAuthError("");
+      window.history.pushState(null, "", "/register");
       return;
     }
     setActiveView(view);
     setGlobalSearchTerm("");
     if (view !== "landing") {
       localStorage.setItem("stegano_active_view", view);
+      window.history.pushState(null, "", `/${view}`);
     } else {
       localStorage.removeItem("stegano_active_view");
+      window.history.pushState(null, "", "/");
     }
 
     if (selectedModality) {
@@ -173,7 +267,13 @@ export default function App() {
     }
     return null;
   });
-  const [authMode, setAuthMode] = useState("login");
+  const [authMode, setAuthMode] = useState(() => {
+    const path = window.location.pathname.toLowerCase();
+    if (path === "/register" || path.endsWith("/register")) {
+      return "register";
+    }
+    return "login";
+  });
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -285,7 +385,8 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentUser]);
 
-  // Auto-login to default profile on startup if not already logged in
+  // Auto-login to default profile on startup has been commented out to allow manual login view behavior.
+  /*
   useEffect(() => {
     const autoLogin = async (retries = 5, delay = 1000) => {
       const token = localStorage.getItem("stegano_access_token");
@@ -345,6 +446,7 @@ export default function App() {
     
     setTimeout(() => autoLogin(5, 1000), 200);
   }, []);
+  */
 
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
@@ -596,9 +698,26 @@ export default function App() {
     }
   };
 
-  const clearActivity = () => {
-    localStorage.removeItem("stegano_activity");
-    setRecentActivity([]);
+  const clearActivity = async () => {
+    try {
+      await clearMyJobs();
+      localStorage.removeItem("stegano_activity");
+      setRecentActivity([]);
+      setMyJobs([]);
+      
+      // Refresh metrics to show 0.00% Full and 0.00 MB used
+      try {
+        const refreshedMetrics = await fetchMetrics();
+        setMetrics(refreshedMetrics);
+      } catch (metricsErr) {
+        console.error("Failed to refresh metrics after clear:", metricsErr);
+      }
+      
+      showToast("Operations history cleared successfully.", "success");
+    } catch (err) {
+      console.error("Failed to clear operations history:", err);
+      showToast("Failed to clear history. Check server connection.", "error");
+    }
   };
 
   if (loadingSession) {
@@ -634,54 +753,270 @@ export default function App() {
   }
 
   if (activeView === "landing") {
-    return <LandingView currentUser={currentUser} onNavigate={handleViewChange} showToast={showToast} />;
+    return (
+      <>
+        <LandingView
+          currentUser={currentUser}
+          onNavigate={handleViewChange}
+          showToast={showToast}
+          onOpenDocs={() => setShowDocModal(true)}
+          onOpenPricing={() => setShowPricingModal(true)}
+        />
+        
+        {/* Documentation / Handbook Modal */}
+        {showDocModal && (
+          <div className="modal-overlay" onClick={() => setShowDocModal(false)}>
+            <div className="modal-card" style={{ background: "#ffffff", border: "1px solid var(--border-dim)", color: "var(--text-primary)", maxWidth: "700px", width: "95%" }} onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close-btn" style={{ color: "var(--text-muted)" }} onClick={() => setShowDocModal(false)}>&times;</button>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "20px" }}>
+                <div style={{ color: "#2563eb", display: "flex" }}><SvgIcons.Book size={24} /></div>
+                <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: 0 }}>StegoVault Operations Manual</h2>
+              </div>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: "24px", minHeight: "350px", maxHeight: "450px", overflow: "hidden" }}>
+                {/* Left Side Tabs */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", borderRight: "1px solid var(--border-dim)", paddingRight: "16px" }}>
+                  {["Overview", "Encoding", "Decoding", "Security", "Hardware"].map((tabName) => (
+                    <button
+                      key={tabName}
+                      className={`sidebar-item ${docActiveTab === tabName ? "active" : ""}`}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        fontSize: "0.85rem",
+                        borderRadius: "8px",
+                        border: "none",
+                        textAlign: "left",
+                        justifyContent: "flex-start",
+                        minHeight: "auto",
+                        background: docActiveTab === tabName ? "rgba(37, 99, 235, 0.08)" : "transparent",
+                        color: docActiveTab === tabName ? "#2563eb" : "var(--text-primary)",
+                        cursor: "pointer"
+                      }}
+                      onClick={() => setDocActiveTab(tabName)}
+                    >
+                      {tabName}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Right Side Content */}
+                <div style={{ overflowY: "auto", paddingRight: "8px", fontSize: "0.9rem", lineHeight: "1.5", color: "var(--text-primary)" }}>
+                  {docActiveTab === "Overview" && (
+                    <div>
+                      <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem" }}>Platform Architecture</h3>
+                      <p>StegoVault is a multi-modal neural steganography system designed to embed encrypted secret payloads inside benign carrier files (images, audio, video, text) without visually or audibly changing their profiles.</p>
+                      <p>It utilizes deep-learning models to execute high-capacity data hiding, AES-GCM to secure payloads, and evolved local enhancement protocols during extraction to maximize recovery quality.</p>
+                    </div>
+                  )}
+                  {docActiveTab === "Encoding" && (
+                    <div>
+                      <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem" }}>Encoding Protocol (Embedding)</h3>
+                      <p>To encrypt and embed data:</p>
+                      <ol style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <li>Select a carrier modality (e.g. Image or Video).</li>
+                        <li>Upload the cover carrier and the secret payload.</li>
+                        <li>Choose the embedding algorithm quality preset (e.g. Adaptive Quality-Preserving).</li>
+                        <li>Submit the job. The system processes the files asynchronously using CNN/Transformer models to insert data and outputs a secure stego container and access key.</li>
+                      </ol>
+                    </div>
+                  )}
+                  {docActiveTab === "Decoding" && (
+                    <div>
+                      <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem" }}>Decoding Protocol (Extraction)</h3>
+                      <p>To extract data:</p>
+                      <ol style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <li>Upload the stego carrier.</li>
+                        <li>Enter the sender-issued access key.</li>
+                        <li>The system validates the signature key-binding to prevent tampering.</li>
+                        <li>The secret file is decrypted. If it is an image or video, the system automatically triggers post-processing enhancement (upscaling, detail boosting, denoising) to ensure superior clarity.</li>
+                      </ol>
+                    </div>
+                  )}
+                  {docActiveTab === "Security" && (
+                    <div>
+                      <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem" }}>Cryptographic Specifications</h3>
+                      <p>StegoVault secures hidden data layers with military-grade protocols:</p>
+                      <ul style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <li><strong>AES-256-GCM</strong>: Symmetric encryption for payloads with integrated authenticated decryption tag.</li>
+                        <li><strong>Key-Signature Binding</strong>: Derives a signature from the stego file and binds the access key, raising errors if a tampered file is read.</li>
+                        <li><strong>SHA-256 Integrity</strong>: Computes standard hash sums of inputs/outputs to prove data consistency.</li>
+                      </ul>
+                    </div>
+                  )}
+                  {docActiveTab === "Hardware" && (
+                    <div>
+                      <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem" }}>Hardware Optimization</h3>
+                      <p>StegoVault auto-detects acceleration pathways:</p>
+                      <ul style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <li><strong>CUDA Core Engine</strong>: Activates deep learning acceleration when NVIDIA hardware is online. Mixed Precision (FP16) is enabled for efficient tensor processing.</li>
+                        <li><strong>CPU Fallback</strong>: Runs standard jobs on multi-threaded CPUs when GPU is not present. Note that large video or audio jobs may run slower in CPU mode.</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--border-dim)", marginTop: "20px", paddingTop: "16px" }}>
+                <button className="btn-submit" style={{ minHeight: "auto", width: "auto", padding: "8px 24px", fontSize: "0.85rem" }} onClick={() => setShowDocModal(false)}>Done</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pricing / Platform Plans Modal */}
+        {showPricingModal && (
+          <div className="modal-overlay" onClick={() => setShowPricingModal(false)}>
+            <div className="modal-card" style={{ background: "#ffffff", border: "1px solid var(--border-dim)", color: "var(--text-primary)", maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close-btn" style={{ color: "var(--text-muted)", fontSize: "1.5rem" }} onClick={() => setShowPricingModal(false)}>&times;</button>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "24px" }}>
+                <div style={{ color: "#2563eb", display: "flex" }}><SvgIcons.Activity size={24} /></div>
+                <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: 0 }}>StegoVault Platform Plans</h2>
+              </div>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+                {/* Community Plan */}
+                <div className="pricing-card-community">
+                  <span style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase" }}>Open Source</span>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>Community Plan</h3>
+                  <span style={{ fontSize: "1.5rem", fontWeight: 800 }}>₹0 <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--text-muted)" }}>/ month</span></span>
+                  <ul style={{ paddingLeft: "16px", fontSize: "0.8rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "6px", margin: 0 }}>
+                    <li>Standard LSB & DWT algorithms</li>
+                    <li>100 MB upload limits</li>
+                    <li>CPU-based thread processing</li>
+                    <li>Local vault storage database</li>
+                  </ul>
+                  <button className="btn-manage-vault" style={{ marginTop: "auto" }} onClick={() => { setShowPricingModal(false); handleViewChange(currentUser ? "dashboard" : "login"); }}>
+                    Active Plan
+                  </button>
+                </div>
+                
+                {/* Enterprise Plan */}
+                <div className="pricing-card-pro">
+                  <span style={{ position: "absolute", top: "-12px", right: "16px", background: "#2563eb", color: "#ffffff", fontSize: "0.65rem", fontFamily: "var(--font-mono)", padding: "2px 8px", borderRadius: "999px", fontWeight: 700 }}>PRO</span>
+                  <span style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)", color: "#2563eb", textTransform: "uppercase", fontWeight: 600 }}>Advanced Shielding</span>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>Sentinel Pro</h3>
+                  <span style={{ fontSize: "1.5rem", fontWeight: 800 }}>₹1,499 <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--text-muted)" }}>/ month</span></span>
+                  <ul style={{ paddingLeft: "16px", fontSize: "0.8rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "6px", margin: 0 }}>
+                    <li>Adaptive GAN neural shielding</li>
+                    <li>1 GB upload limit / high speed</li>
+                    <li>CUDA-GPU accelerated cores</li>
+                    <li>Key-signature integrity auditing</li>
+                    <li>Redundant cloud vault replication</li>
+                  </ul>
+                  <button className="btn-submit" style={{ minHeight: "auto", padding: "10px", borderRadius: "10px", marginTop: "auto", width: "100%" }} onClick={() => { setShowPricingModal(false); alert("Billing integration: Sentinel Pro subscription interface is simulated."); }}>
+                    Upgrade to Pro
+                  </button>
+                </div>
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--border-dim)", paddingTop: "16px" }}>
+                <button className="btn-filter" style={{ minHeight: "auto", padding: "8px 24px", fontSize: "0.85rem" }} onClick={() => setShowPricingModal(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Toast System */}
+        {toast && (
+          <div style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            background: toast.type === "success" ? "#10b981" : toast.type === "error" ? "#ef4444" : "#3b82f6",
+            color: "#ffffff",
+            padding: "16px 24px",
+            borderRadius: "12px",
+            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+            zIndex: 10000,
+            fontFamily: "inherit",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            animation: "slideUp 0.3s ease-out"
+          }}>
+            <span>{toast.type === "success" ? "✓" : toast.type === "error" ? "✗" : "ℹ"}</span>
+            <span>{toast.message}</span>
+          </div>
+        )}
+      </>
+    );
   }
 
   if (!currentUser) {
     return (
-      <div className="full-page-auth-container">
-        <div className="auth-header-bar" onClick={() => handleViewChange("landing")}>
-          <div className="logo-shield-wrapper">
-            <SvgIcons.Shield size={24} />
-          </div>
-          <span>SteganOS</span>
-        </div>
-        <section className="auth-panel-full">
-          <div className="auth-panel-card">
-            <div className="auth-panel-header">
-              <h2>{authMode === "login" ? "Secure Login" : "Create Account"}</h2>
-              <p>Sign in to keep operations private and persist your encoding/decoding history.</p>
+      <div className="split-auth-container">
+        {/* Left Split - Hero Image */}
+        <section className="split-auth-left">
+          <img
+            src="/login_hero.png"
+            alt="StegoVault Secure Portal Visual"
+            className="split-auth-left-img"
+          />
+          <div className="split-auth-left-overlay"></div>
+        </section>
+
+        {/* Right Split - Login Form */}
+        <section className="split-auth-right">
+          <div className="split-auth-card">
+            {/* Header & Branding */}
+            <div className="split-auth-header">
+              <div className="split-auth-logo-row" onClick={() => handleViewChange("landing")}>
+                <img src="/logo.png" alt="StegoVault Logo" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
+                <span>StegoVault</span>
+              </div>
+              <h1 className="split-auth-title">
+                {authMode === "login" ? "Secure Login" : "Create Account"}
+              </h1>
+              <p className="split-auth-subtitle">
+                {authMode === "login"
+                  ? "Sign in to keep operations private and persist your encoding/decoding history."
+                  : "Register to create your secure steganographic workspace."}
+              </p>
             </div>
-            <form className="auth-form" onSubmit={handleAuthSubmit}>
-              <input
-                type="email"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="Email address"
-                className="auth-input"
-                required
-              />
-              <input
-                type="password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Password"
-                className="auth-input"
-                required
-              />
-              <button type="submit" className="btn-submit auth-submit">
-                {authMode === "login" ? "Sign In" : "Register"}
+
+            {/* Form */}
+            <form className="split-auth-form" onSubmit={handleAuthSubmit}>
+              <div className="split-auth-input-group">
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="Email address"
+                  className="split-auth-input"
+                  required
+                />
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="Password"
+                  className="split-auth-input"
+                  required
+                />
+              </div>
+              <button type="submit" className="split-auth-submit-btn">
+                {authMode === "login" ? "SIGN IN" : "REGISTER"}
               </button>
             </form>
-            <div className="auth-actions">
-              <button type="button" className="link-button" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}> 
+
+            {/* Footer Links */}
+            <div className="split-auth-footer-links">
+              <button
+                type="button"
+                className="split-auth-link-primary"
+                onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
+              >
                 {authMode === "login" ? "Create your account" : "Already have an account? Sign in"}
               </button>
               {authError && <div className="auth-error">{authError}</div>}
+              
+              <button className="split-auth-back-btn" onClick={() => handleViewChange("landing")}>
+                ← Back to Home
+              </button>
             </div>
-            <button className="auth-back-btn" onClick={() => handleViewChange("landing")}>
-              ← Back to Home
-            </button>
           </div>
         </section>
       </div>
@@ -694,7 +1029,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <h1 className="sidebar-logo-title" style={{ display: "flex", alignItems: "center", gap: 8, color: "#2563eb" }}>
-            <SvgIcons.Shield size={24} />
+            <img src="/logo.png" alt="StegoVault Logo" style={{ width: "32px", height: "32px", objectFit: "contain" }} />
             StegoVault
           </h1>
           <span className="sidebar-logo-sub">Deep Learning v2.4</span>
@@ -885,6 +1220,7 @@ export default function App() {
             job={job}
             error={error}
             recentActivity={filteredRecentActivity}
+            myJobs={filteredJobs}
             isSubmitting={isSubmitting}
             showToast={showToast}
           />
@@ -1128,6 +1464,59 @@ export default function App() {
               
               <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--border-dim)", marginTop: "20px", paddingTop: "16px" }}>
                 <button className="btn-submit" style={{ minHeight: "auto", width: "auto", padding: "8px 24px", fontSize: "0.85rem" }} onClick={() => setShowDocModal(false)}>Done</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pricing / Platform Plans Modal */}
+        {showPricingModal && (
+          <div className="modal-overlay" onClick={() => setShowPricingModal(false)}>
+            <div className="modal-card" style={{ background: "#ffffff", border: "1px solid var(--border-dim)", color: "var(--text-primary)", maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close-btn" style={{ color: "var(--text-muted)", fontSize: "1.5rem" }} onClick={() => setShowPricingModal(false)}>&times;</button>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "24px" }}>
+                <div style={{ color: "#2563eb", display: "flex" }}><SvgIcons.Activity size={24} /></div>
+                <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: 0 }}>StegoVault Platform Plans</h2>
+              </div>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+                {/* Community Plan */}
+                <div className="pricing-card-community">
+                  <span style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase" }}>Open Source</span>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>Community Plan</h3>
+                  <span style={{ fontSize: "1.5rem", fontWeight: 800 }}>₹0 <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--text-muted)" }}>/ month</span></span>
+                  <ul style={{ paddingLeft: "16px", fontSize: "0.8rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "6px", margin: 0 }}>
+                    <li>Standard LSB & DWT algorithms</li>
+                    <li>100 MB upload limits</li>
+                    <li>CPU-based thread processing</li>
+                    <li>Local vault storage database</li>
+                  </ul>
+                  <button className="btn-manage-vault" style={{ marginTop: "auto" }} onClick={() => { setShowPricingModal(false); handleViewChange(currentUser ? "dashboard" : "login"); }}>
+                    Active Plan
+                  </button>
+                </div>
+                
+                {/* Enterprise Plan */}
+                <div className="pricing-card-pro">
+                  <span style={{ position: "absolute", top: "-12px", right: "16px", background: "#2563eb", color: "#ffffff", fontSize: "0.65rem", fontFamily: "var(--font-mono)", padding: "2px 8px", borderRadius: "999px", fontWeight: 700 }}>PRO</span>
+                  <span style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)", color: "#2563eb", textTransform: "uppercase", fontWeight: 600 }}>Advanced Shielding</span>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>Sentinel Pro</h3>
+                  <span style={{ fontSize: "1.5rem", fontWeight: 800 }}>₹1,499 <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--text-muted)" }}>/ month</span></span>
+                  <ul style={{ paddingLeft: "16px", fontSize: "0.8rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "6px", margin: 0 }}>
+                    <li>Adaptive GAN neural shielding</li>
+                    <li>1 GB upload limit / high speed</li>
+                    <li>CUDA-GPU accelerated cores</li>
+                    <li>Key-signature integrity auditing</li>
+                    <li>Redundant cloud vault replication</li>
+                  </ul>
+                  <button className="btn-submit" style={{ minHeight: "auto", padding: "10px", borderRadius: "10px", marginTop: "auto", width: "100%" }} onClick={() => { setShowPricingModal(false); alert("Billing integration: Sentinel Pro subscription interface is simulated."); }}>
+                    Upgrade to Pro
+                  </button>
+                </div>
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--border-dim)", paddingTop: "16px" }}>
+                <button className="btn-filter" style={{ minHeight: "auto", padding: "8px 24px", fontSize: "0.85rem" }} onClick={() => setShowPricingModal(false)}>Close</button>
               </div>
             </div>
           </div>

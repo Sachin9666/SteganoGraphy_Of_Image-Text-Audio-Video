@@ -92,6 +92,10 @@ export async function fetchMyJobs() {
   return requestJson("/jobs/me", { method: "GET" });
 }
 
+export async function clearMyJobs() {
+  return requestJson("/jobs/me", { method: "DELETE" });
+}
+
 export function createEncodeJob({ modality, coverFile, secretFile, embeddingType }) {
   const formData = new FormData();
   formData.append("modality", modality);

@@ -9,13 +9,7 @@ export function VaultView({ myJobs = [], onNavigate, onVaultDecrypt, showToast }
   const [selectedModality, setSelectedModality] = useState("all");
   const [selectedFile, setSelectedFile] = useState(null);
 
-  const [logs, setLogs] = useState([
-    "[2026-06-23 14:00:01] INITIALIZING SECURE FRAGMENT HANDSHAKE...",
-    "[2026-06-23 14:00:02] RESOLVED LOCAL KEY AUTHORIZATION: STATE=ACTIVE METHOD=AES-256-GCM",
-    "[2026-06-23 14:00:03] SYNCHRONIZING SECURE REPOSITORY VAULT INDEX: READ=OK COUNT=" + myJobs.length,
-    "[2026-06-23 14:00:05] INTEGRITY CHECK COMPLETE. SHARDS STATUS: VERIFIED (100% HEALTH)",
-    "[2026-06-23 14:00:06] READY FOR SECURE DECRYPT/EXTRACT PIPELINE OPERATIONS."
-  ]);
+
 
   // Filter completed jobs for the vault (only success jobs are vaulted)
   const completedJobs = myJobs.filter(job => job.status === "completed");
@@ -380,17 +374,7 @@ export function VaultView({ myJobs = [], onNavigate, onVaultDecrypt, showToast }
         </div>
       </div>
 
-      {/* Terminal log drawer */}
-      <div className="vault-log-drawer">
-        <div className="vault-log-header">{"<>"} VAULT_INDEX_LOGS</div>
-        <div className="vault-log-terminal">
-          {logs.map((log, index) => (
-            <div key={index} className="vault-log-line">
-              {log}
-            </div>
-          ))}
-        </div>
-      </div>
+
       {/* Telemetry Details Modal Overlay */}
       {selectedFile && (
         <div className="modal-overlay" onClick={() => setSelectedFile(null)}>
