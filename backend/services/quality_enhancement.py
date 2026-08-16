@@ -4,21 +4,16 @@ from io import BytesIO
 from PIL import Image, ImageEnhance, ImageFilter
 import numpy as np
 
-def enhance_media(file_path: Path) -> None:
+def enhance_media(media_bytes: bytes, filename: str) -> bytes:
     """
-    Apply post-processing quality enhancement to image or video files.
+    Apply post-processing quality enhancement to image or video files in-memory.
     """
-    if not file_path.exists():
-        print(f"Enhancer error: file {file_path} does not exist")
-        return
-        
-    suffix = file_path.suffix.lower()
+    suffix = Path(filename).suffix.lower()
     
     if suffix in {".png", ".jpg", ".jpeg", ".bmp", ".webp"}:
         try:
-            print(f"Enhancing image quality: {file_path}")
-            image_bytes = file_path.read_bytes()
-            img = Image.open(BytesIO(image_bytes))
+            print(f"Enhancing image quality: {filename}")
+            img = Image.open(BytesIO(media_bytes))
             orig_format = img.format or "PNG"
             
             w, h = img.size
@@ -41,14 +36,15 @@ def enhance_media(file_path: Path) -> None:
             
             out_buf = BytesIO()
             img.save(out_buf, format=orig_format)
-            file_path.write_bytes(out_buf.getvalue())
-            print(f"Successfully enhanced image: {file_path}")
+            print(f"Successfully enhanced image: {filename}")
+            return out_buf.getvalue()
         except Exception as e:
             print(f"Error enhancing decoded image: {e}")
+            return media_bytes
             
     elif suffix in {".mp4", ".mov", ".avi", ".mkv"}:
-        # Skip video enhancement on CPU to prevent excessive processing times and make operations instant
-        print(f"Video enhancement skipped for {file_path} to ensure fast response times.")
-        return
+        print(f"Video enhancement skipped for {filename} to ensure fast response times.")
+        return media_bytes
     else:
         print(f"File format {suffix} not supported for enhancement, skipping.")
+        return media_bytes

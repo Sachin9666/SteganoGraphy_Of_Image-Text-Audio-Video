@@ -26,11 +26,21 @@ class JobRecord:
     def to_response(self) -> dict:
         import os
         size_bytes = 0
-        if self.output_path and os.path.exists(self.output_path):
-            try:
-                size_bytes = os.path.getsize(self.output_path)
-            except OSError:
-                pass
+        if self.output_path:
+            if self.output_path.startswith("gridfs://"):
+                try:
+                    from backend.services.db import fs
+                    from bson.objectid import ObjectId
+                    file_id_str = self.output_path.replace("gridfs://", "")
+                    grid_out = fs.get(ObjectId(file_id_str))
+                    size_bytes = grid_out.length
+                except Exception:
+                    pass
+            elif os.path.exists(self.output_path):
+                try:
+                    size_bytes = os.path.getsize(self.output_path)
+                except OSError:
+                    pass
 
         return {
             "job_id": self.job_id,

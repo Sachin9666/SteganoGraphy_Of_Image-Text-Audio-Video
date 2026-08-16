@@ -1223,7 +1223,8 @@ body {
 
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: calc(100vh / var(--zoom-factor, 1));
+  overflow: hidden;
   background-color: var(--bg-deep);
   position: relative;
 }
@@ -1238,7 +1239,7 @@ body {
   padding: 24px;
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: 100%;
   z-index: 100;
   box-shadow: 2px 0 10px rgba(0, 0, 0, 0.02);
 }
@@ -1377,7 +1378,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  height: 100vh;
+  height: 100%;
 }
 
 /* Topbar */
@@ -3827,6 +3828,12 @@ body {
 }
 
 @media (max-width: 768px) {
+  .app-container {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+  }
+
   /* Hide desktop sidebar on mobile/tablet */
   .sidebar {
     display: none !important;

@@ -93,7 +93,6 @@ export default function App() {
           localStorage.setItem("app_zoom", nextZoom.toString());
           document.body.style.zoom = nextZoom;
           document.documentElement.style.setProperty("--zoom-factor", nextZoom.toString());
-          showToast(`Zoom level: ${Math.round(nextZoom * 100)}%`, "info");
         } else if (e.key === "-") {
           e.preventDefault();
           const currentZoom = parseFloat(localStorage.getItem("app_zoom") || "1");
@@ -101,13 +100,11 @@ export default function App() {
           localStorage.setItem("app_zoom", nextZoom.toString());
           document.body.style.zoom = nextZoom;
           document.documentElement.style.setProperty("--zoom-factor", nextZoom.toString());
-          showToast(`Zoom level: ${Math.round(nextZoom * 100)}%`, "info");
         } else if (e.key === "0") {
           e.preventDefault();
           localStorage.setItem("app_zoom", "1");
           document.body.style.zoom = "1";
           document.documentElement.style.setProperty("--zoom-factor", "1");
-          showToast("Zoom level reset to 100%", "info");
         }
       }
     };

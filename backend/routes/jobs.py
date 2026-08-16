@@ -10,7 +10,7 @@ router = APIRouter(tags=["jobs"])
 
 import os
 import time
-from backend.services.db import conn
+from backend.services.db import jobs_col
 from backend.services.model_runtime import get_runtime_profile
 
 START_TIME = time.time()
@@ -24,48 +24,56 @@ async def get_my_jobs(current_user: dict = Depends(get_current_user)) -> list[Jo
 
 @router.delete("/jobs/me")
 async def clear_my_jobs(current_user: dict = Depends(get_current_user)) -> dict:
-    cursor = conn.cursor()
-    # Delete physical output files if they exist
-    rows = cursor.execute("SELECT output_path FROM jobs WHERE user_id = ?", (current_user["id"],)).fetchall()
+    # Delete database job records and associated GridFS/local files
+    rows = list(jobs_col.find({"user_id": current_user["id"]}, {"output_path": 1, "input_path": 1, "secret_path": 1}))
+    from backend.services.db import delete_file
     for row in rows:
-        path = row["output_path"]
-        if path and os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        for key in ["output_path", "input_path", "secret_path"]:
+            path = row.get(key)
+            if path:
+                try:
+                    delete_file(path)
+                except Exception:
+                    pass
     
     # Delete database job records
-    cursor.execute("DELETE FROM jobs WHERE user_id = ?", (current_user["id"],))
-    conn.commit()
+    jobs_col.delete_many({"user_id": current_user["id"]})
     return {"status": "success", "message": "All jobs cleared successfully"}
 
 
 @router.get("/jobs/metrics")
 async def get_jobs_metrics(current_user: dict = Depends(get_current_user)) -> dict:
-    cursor = conn.cursor()
-    
     # Calculate storage used by completed jobs of current user
     total_bytes = 0
-    rows = cursor.execute("SELECT output_path FROM jobs WHERE status = 'completed' AND user_id = ?", (current_user["id"],)).fetchall()
+    rows = list(jobs_col.find({"status": "completed", "user_id": current_user["id"]}, {"output_path": 1}))
     for row in rows:
-        path = row["output_path"]
-        if path and os.path.exists(path):
-            try:
-                total_bytes += os.path.getsize(path)
-            except OSError:
-                pass
+        path = row.get("output_path")
+        if path:
+            if path.startswith("gridfs://"):
+                try:
+                    from backend.services.db import fs
+                    from bson.objectid import ObjectId
+                    file_id_str = path.replace("gridfs://", "")
+                    grid_out = fs.get(ObjectId(file_id_str))
+                    total_bytes += grid_out.length
+                except Exception:
+                    pass
+            elif os.path.exists(path):
+                try:
+                    total_bytes += os.path.getsize(path)
+                except OSError:
+                    pass
 
     # Count files
-    file_count = cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'completed' AND user_id = ?", (current_user["id"],)).fetchone()[0]
+    file_count = jobs_col.count_documents({"status": "completed", "user_id": current_user["id"]})
 
     # Calculate average duration/latency of last few jobs
     avg_latency = 15.0
     durations = []
-    time_rows = cursor.execute(
-        "SELECT created_at, updated_at FROM jobs WHERE status = 'completed' AND user_id = ? ORDER BY updated_at DESC LIMIT 10", 
-        (current_user["id"],)
-    ).fetchall()
+    time_rows = list(jobs_col.find(
+        {"status": "completed", "user_id": current_user["id"]},
+        {"created_at": 1, "updated_at": 1}
+    ).sort("updated_at", -1).limit(10))
     
     from datetime import datetime
     for r in time_rows:
@@ -124,10 +132,43 @@ async def get_job_status(job_id: str, current_user: dict = Depends(get_current_u
 
 
 @router.get("/jobs/{job_id}/artifact")
-async def download_artifact(job_id: str, current_user: dict = Depends(get_current_user)) -> FileResponse:
+async def download_artifact(job_id: str, current_user: dict = Depends(get_current_user)):
     job = get_job(job_id)
     if not job or job.user_id != current_user["id"] or not job.output_path:
         raise HTTPException(status_code=404, detail="Artifact not available")
-    return FileResponse(path=job.output_path, filename=job.output_name)
+        
+    if job.output_path.startswith("gridfs://"):
+        from backend.services.db import fs
+        from bson.objectid import ObjectId
+        from fastapi.responses import StreamingResponse
+        import mimetypes
+        try:
+            file_id_str = job.output_path.replace("gridfs://", "")
+            grid_out = fs.get(ObjectId(file_id_str))
+            
+            # Guess content type or default to binary stream
+            media_type, _ = mimetypes.guess_type(job.output_name or "")
+            if not media_type:
+                media_type = "application/octet-stream"
+                
+            def iter_file():
+                # Reset stream pointer to beginning just in case
+                grid_out.seek(0)
+                while chunk := grid_out.read(1024 * 1024):  # 1MB chunks
+                    yield chunk
+                    
+            return StreamingResponse(
+                iter_file(),
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{job.output_name}"',
+                    "Content-Length": str(grid_out.length)
+                }
+            )
+        except Exception as e:
+            print(f"Error downloading artifact from GridFS: {e}")
+            raise HTTPException(status_code=404, detail="Artifact not found in database")
+    else:
+        return FileResponse(path=job.output_path, filename=job.output_name)
 
 
