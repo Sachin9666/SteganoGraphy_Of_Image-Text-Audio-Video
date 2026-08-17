@@ -15,7 +15,7 @@ from backend.security.crypto import (
     sha256_hex,
 )
 from backend.services.config import settings
-from backend.services.db import conn
+from backend.services.db import jobs_col, save_file, get_file_bytes
 from backend.services.job_models import JobRecord
 from backend.services.media_packaging import build_container, split_container, stego_output_name
 from backend.services.model_runtime import get_runtime_profile
@@ -42,102 +42,132 @@ def get_job(job_id: str) -> JobRecord | None:
     if record:
         return record
 
-    cursor = conn.cursor()
-    row = cursor.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+    row = jobs_col.find_one({"job_id": job_id})
     if not row:
         return None
 
+    # Safe parsing of dict/json fields
+    metadata = row.get("metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except Exception:
+            metadata = {}
+    elif metadata is None:
+        metadata = {}
+
+    device_info = row.get("device_info")
+    if isinstance(device_info, str):
+        try:
+            device_info = json.loads(device_info)
+        except Exception:
+            device_info = None
+
     record = JobRecord(
         job_id=row["job_id"],
-        job_type=row["job_type"],
-        modality=row["modality"],
+        job_type=row.get("job_type"),
+        modality=row.get("modality"),
         user_id=row["user_id"],
-        status=row["status"],
-        progress=row["progress"],
-        stage=row["stage"],
-        message=row["message"],
-        input_path=row["input_path"],
-        secret_path=row["secret_path"],
-        output_path=row["output_path"],
-        output_name=row["output_name"],
-        access_key=row["access_key"],
-        integrity_hash=row["integrity_hash"],
-        device_info=json.loads(row["device_info"]) if row["device_info"] else None,
-        metadata=json.loads(row["metadata"]) if row["metadata"] else {},
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        status=row.get("status"),
+        progress=row.get("progress"),
+        stage=row.get("stage"),
+        message=row.get("message"),
+        input_path=row.get("input_path"),
+        secret_path=row.get("secret_path"),
+        output_path=row.get("output_path"),
+        output_name=row.get("output_name"),
+        access_key=row.get("access_key"),
+        integrity_hash=row.get("integrity_hash"),
+        device_info=device_info,
+        metadata=metadata,
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
     )
     jobs[job_id] = record
     return record
 
 
 def get_user_job_records(user_id: str) -> list[JobRecord]:
-    cursor = conn.cursor()
-    rows = cursor.execute("SELECT * FROM jobs WHERE user_id = ? ORDER BY updated_at DESC", (user_id,)).fetchall()
+    rows = jobs_col.find({"user_id": user_id}).sort("updated_at", -1)
     records: list[JobRecord] = []
     for row in rows:
+        metadata = row.get("metadata")
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:
+                metadata = {}
+        elif metadata is None:
+            metadata = {}
+
+        device_info = row.get("device_info")
+        if isinstance(device_info, str):
+            try:
+                device_info = json.loads(device_info)
+            except Exception:
+                device_info = None
+
         records.append(
             JobRecord(
                 job_id=row["job_id"],
-                job_type=row["job_type"],
-                modality=row["modality"],
+                job_type=row.get("job_type"),
+                modality=row.get("modality"),
                 user_id=row["user_id"],
-                status=row["status"],
-                progress=row["progress"],
-                stage=row["stage"],
-                message=row["message"],
-                input_path=row["input_path"],
-                secret_path=row["secret_path"],
-                output_path=row["output_path"],
-                output_name=row["output_name"],
-                access_key=row["access_key"],
-                integrity_hash=row["integrity_hash"],
-                device_info=json.loads(row["device_info"]) if row["device_info"] else None,
-                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
+                status=row.get("status"),
+                progress=row.get("progress"),
+                stage=row.get("stage"),
+                message=row.get("message"),
+                input_path=row.get("input_path"),
+                secret_path=row.get("secret_path"),
+                output_path=row.get("output_path"),
+                output_name=row.get("output_name"),
+                access_key=row.get("access_key"),
+                integrity_hash=row.get("integrity_hash"),
+                device_info=device_info,
+                metadata=metadata,
+                created_at=row.get("created_at"),
+                updated_at=row.get("updated_at"),
             )
         )
     return records
 
 
-async def _save_upload(upload: UploadFile, target: Path) -> bytes:
+async def _save_upload(upload: UploadFile) -> bytes:
     content = await upload.read()
-    target.write_bytes(content)
     await upload.seek(0)
     return content
 
 
 def _persist_job_record(record: JobRecord) -> None:
-    cursor = conn.cursor()
     now = datetime.now(timezone.utc).isoformat()
     if record.created_at is None:
         record.created_at = now
     record.updated_at = now
-    cursor.execute(
-        "INSERT OR REPLACE INTO jobs (job_id, user_id, job_type, modality, status, progress, stage, message, input_path, secret_path, output_path, output_name, access_key, integrity_hash, metadata, device_info, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            record.job_id,
-            record.user_id,
-            record.job_type,
-            record.modality,
-            record.status,
-            record.progress,
-            record.stage,
-            record.message,
-            record.input_path,
-            record.secret_path,
-            record.output_path,
-            record.output_name,
-            record.access_key,
-            record.integrity_hash,
-            json.dumps(record.metadata),
-            json.dumps(record.device_info) if record.device_info else None,
-            record.created_at,
-            record.updated_at,
-        ),
+
+    jobs_col.update_one(
+        {"job_id": record.job_id},
+        {"$set": {
+            "job_id": record.job_id,
+            "user_id": record.user_id,
+            "job_type": record.job_type,
+            "modality": record.modality,
+            "status": record.status,
+            "progress": record.progress,
+            "stage": record.stage,
+            "message": record.message,
+            "input_path": record.input_path,
+            "secret_path": record.secret_path,
+            "output_path": record.output_path,
+            "output_name": record.output_name,
+            "access_key": record.access_key,
+            "integrity_hash": record.integrity_hash,
+            "metadata": record.metadata,
+            "device_info": record.device_info,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }},
+        upsert=True
     )
-    conn.commit()
 
 
 def _store_job_record(record: JobRecord) -> None:
@@ -155,18 +185,19 @@ async def create_encode_job(
     user_id: str,
 ) -> dict:
     job_id = uuid4().hex
-    input_path = build_storage_path(settings.uploads_dir, cover_meta.filename)
-    secret_path = build_storage_path(settings.secret_dir, secret_meta.filename)
-    cover_bytes = await _save_upload(cover_file, input_path)
-    await _save_upload(secret_file, secret_path)
+    cover_bytes = await _save_upload(cover_file)
+    secret_bytes = await _save_upload(secret_file)
+
+    input_path = await asyncio.to_thread(save_file, cover_bytes, cover_meta.filename)
+    secret_path = await asyncio.to_thread(save_file, secret_bytes, secret_meta.filename)
 
     record = JobRecord(
         job_id=job_id,
         job_type="encode",
         modality=modality,
         user_id=user_id,
-        input_path=str(input_path),
-        secret_path=str(secret_path),
+        input_path=input_path,
+        secret_path=secret_path,
         metadata={"embedding_type": embedding_type, "input_name": cover_meta.filename},
     )
     _store_job_record(record)
@@ -188,15 +219,15 @@ async def create_decode_job(
     user_id: str,
 ) -> dict:
     job_id = uuid4().hex
-    input_path = build_storage_path(settings.uploads_dir, stego_meta.filename)
-    stego_bytes = await _save_upload(stego_file, input_path)
+    stego_bytes = await _save_upload(stego_file)
+    input_path = await asyncio.to_thread(save_file, stego_bytes, stego_meta.filename)
 
     record = JobRecord(
         job_id=job_id,
         job_type="decode",
         modality=modality,
         user_id=user_id,
-        input_path=str(input_path),
+        input_path=input_path,
         access_key=access_key,
         metadata={"input_name": stego_meta.filename, "enhance": enhance},
     )
@@ -223,7 +254,7 @@ async def _run_encode_job(record: JobRecord, cover_bytes: bytes, cover_name: str
 
         if record.secret_path is None:
             raise ValueError("Secret path is not defined")
-        secret_bytes = await asyncio.to_thread(Path(record.secret_path).read_bytes)
+        secret_bytes = await asyncio.to_thread(get_file_bytes, record.secret_path)
         access_key = generate_access_key()
         record.progress = 30
         record.stage = "inference"
@@ -256,14 +287,13 @@ async def _run_encode_job(record: JobRecord, cover_bytes: bytes, cover_name: str
         )
 
         output_name = stego_output_name(record.job_id, cover_name, "encode")
-        output_path = settings.outputs_dir / output_name
-        await asyncio.to_thread(output_path.write_bytes, container)
+        output_path_str = await asyncio.to_thread(save_file, container, output_name)
 
         record.status = "completed"
         record.progress = 100
         record.stage = "done"
         record.message = "Stego artifact ready"
-        record.output_path = str(output_path)
+        record.output_path = output_path_str
         record.output_name = output_name
         record.access_key = access_key
         record.integrity_hash = await asyncio.to_thread(sha256_hex, container)
@@ -303,11 +333,7 @@ async def _run_decode_job(record: JobRecord, stego_bytes: bytes, _stego_name: st
         record.stage = "inference"
         record.message = "Running decoder model"
         _store_job_record(record)
-        revealed_bytes = await model_service.decode(record.modality, cover_bytes, secret_bytes, runtime)
-
-        output_name = stego_output_name(record.job_id, metadata["secret_name"], "decode")
-        output_path = settings.outputs_dir / output_name
-        await asyncio.to_thread(output_path.write_bytes, revealed_bytes)
+        revealed_bytes = await _get_model_service().decode(record.modality, cover_bytes, secret_bytes, runtime)
 
         # Enhance quality of decoded image/video
         enhance = record.metadata.get("enhance", True)
@@ -316,17 +342,18 @@ async def _run_decode_job(record: JobRecord, stego_bytes: bytes, _stego_name: st
             record.stage = "enhancing"
             record.message = "Enhancing decoded image/video quality"
             _store_job_record(record)
-            await asyncio.to_thread(enhance_media, output_path)
+            revealed_bytes = await asyncio.to_thread(enhance_media, revealed_bytes, metadata["secret_name"])
 
-        enhanced_bytes = await asyncio.to_thread(output_path.read_bytes)
+        output_name = stego_output_name(record.job_id, metadata["secret_name"], "decode")
+        output_path_str = await asyncio.to_thread(save_file, revealed_bytes, output_name)
 
         record.status = "completed"
         record.progress = 100
         record.stage = "done"
         record.message = "Hidden content extracted"
-        record.output_path = str(output_path)
+        record.output_path = output_path_str
         record.output_name = output_name
-        record.integrity_hash = await asyncio.to_thread(sha256_hex, enhanced_bytes)
+        record.integrity_hash = await asyncio.to_thread(sha256_hex, revealed_bytes)
         _store_job_record(record)
     except Exception as exc:
         record.status = "failed"

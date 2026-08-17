@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import pymongo
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from backend.security.password import hash_password
 from backend.services.config import settings
-from backend.services.db import conn
+from backend.services.db import users_col
 from backend.services.user_service import get_user_by_id
 
 SECRET_FILE = settings.storage_root / "auth_secret.key"
@@ -82,27 +83,26 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     default_email = "sachin9666@example.com"
     default_id = "default_user_sachin9666"
 
-    # Ensure default user exists in the SQLite database
-    cursor = conn.cursor()
-    row = cursor.execute("SELECT * FROM users WHERE id = ?", (default_id,)).fetchone()
+    # Ensure default user exists in the MongoDB database
+    doc = users_col.find_one({"id": default_id})
     salt = "default_salt"
     password_hash = hash_password("password123", salt)
-    if not row:
-        import sqlite3
+    if not doc:
         try:
-            cursor.execute(
-                "INSERT INTO users (id, email, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)",
-                (default_id, default_email, password_hash, salt, datetime.now(timezone.utc).isoformat()),
-            )
-            conn.commit()
-        except sqlite3.IntegrityError:
+            users_col.insert_one({
+                "id": default_id,
+                "email": default_email,
+                "password_hash": password_hash,
+                "salt": salt,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+        except pymongo.errors.DuplicateKeyError:
             pass
-    elif row["password_hash"] == "default_hash":
-        cursor.execute(
-            "UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",
-            (password_hash, salt, default_id)
+    elif doc.get("password_hash") == "default_hash":
+        users_col.update_one(
+            {"id": default_id},
+            {"$set": {"password_hash": password_hash, "salt": salt}}
         )
-        conn.commit()
 
     if not credentials:
         return {"id": default_id, "email": default_email, "created_at": datetime.now(timezone.utc).isoformat()}

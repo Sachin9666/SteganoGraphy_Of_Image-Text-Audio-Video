@@ -1,88 +1,62 @@
-import json
-import sqlite3
-from pathlib import Path
-
+import pymongo
+import gridfs
+from bson.objectid import ObjectId
 from backend.services.config import settings
 
-DATABASE_PATH = settings.storage_root / "stegano_auth.db"
-DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+# MongoDB connection configuration
+MONGO_URI = "mongodb://localhost:27017"
+DB_NAME = "stego_vault"
 
-import threading
+client = pymongo.MongoClient(MONGO_URI)
+db = client[DB_NAME]
 
-class ThreadLocalConn:
-    def __init__(self):
-        self._local = threading.local()
+users_col = db["users"]
+jobs_col = db["jobs"]
+fs = gridfs.GridFS(db)
 
-    @property
-    def connection(self):
-        if not hasattr(self._local, "conn"):
-            c = sqlite3.connect(DATABASE_PATH, check_same_thread=False, timeout=30.0)
-            c.row_factory = sqlite3.Row
-            c.execute("PRAGMA journal_mode=WAL")
-            self._local.conn = c
-        return self._local.conn
+# Initialize indexes
+users_col.create_index("id", unique=True)
+users_col.create_index("email", unique=True)
+jobs_col.create_index("job_id", unique=True)
+jobs_col.create_index("user_id")
 
-    def cursor(self, *args, **kwargs):
-        return self.connection.cursor(*args, **kwargs)
 
-    def commit(self):
-        return self.connection.commit()
+def save_file(data: bytes, filename: str) -> str:
+    """Saves binary data to GridFS and returns the ObjectId string prefixed with gridfs://."""
+    file_id = fs.put(data, filename=filename)
+    return f"gridfs://{file_id}"
 
-    def rollback(self):
-        return self.connection.rollback()
 
-    def execute(self, *args, **kwargs):
-        return self.connection.execute(*args, **kwargs)
+def get_file_bytes(path_or_id: str) -> bytes:
+    """Retrieves binary data from GridFS if starting with gridfs://, otherwise reads from local file path."""
+    if path_or_id.startswith("gridfs://"):
+        file_id_str = path_or_id.replace("gridfs://", "")
+        grid_out = fs.get(ObjectId(file_id_str))
+        return grid_out.read()
+    else:
+        from pathlib import Path
+        return Path(path_or_id).read_bytes()
 
-    def executemany(self, *args, **kwargs):
-        return self.connection.executemany(*args, **kwargs)
 
-    def executescript(self, *args, **kwargs):
-        return self.connection.executescript(*args, **kwargs)
-
-conn = ThreadLocalConn()
+def delete_file(path_or_id: str) -> None:
+    """Deletes file from GridFS if starting with gridfs://, otherwise deletes from local filesystem."""
+    if not path_or_id:
+        return
+    if path_or_id.startswith("gridfs://"):
+        try:
+            file_id_str = path_or_id.replace("gridfs://", "")
+            fs.delete(ObjectId(file_id_str))
+        except Exception:
+            pass
+    else:
+        import os
+        if os.path.exists(path_or_id):
+            try:
+                os.remove(path_or_id)
+            except OSError:
+                pass
 
 
 def initialize_database() -> None:
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            salt TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )
-        """
-    )
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS jobs (
-            job_id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            job_type TEXT,
-            modality TEXT,
-            status TEXT,
-            progress INTEGER,
-            stage TEXT,
-            message TEXT,
-            input_path TEXT,
-            secret_path TEXT,
-            output_path TEXT,
-            output_name TEXT,
-            access_key TEXT,
-            integrity_hash TEXT,
-            metadata TEXT,
-            device_info TEXT,
-            created_at TEXT,
-            updated_at TEXT,
-            FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-        """
-    )
-    cursor.execute("PRAGMA journal_mode=WAL")
-    conn.commit()
-
-
-initialize_database()
+    """No-op placeholder for backward compatibility."""
+    pass
