@@ -83,40 +83,41 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     default_email = "sachin9666@example.com"
     default_id = "default_user_sachin9666"
 
-    # Ensure default user exists in the MongoDB database
-    doc = users_col.find_one({"id": default_id})
-    salt = "default_salt"
-    password_hash = hash_password("password123", salt)
-    if not doc:
-        try:
-            users_col.insert_one({
-                "id": default_id,
-                "email": default_email,
-                "password_hash": password_hash,
-                "salt": salt,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            })
-        except pymongo.errors.DuplicateKeyError:
-            pass
-    elif doc.get("password_hash") == "default_hash":
-        users_col.update_one(
-            {"id": default_id},
-            {"$set": {"password_hash": password_hash, "salt": salt}}
-        )
+    # Default user is now initialized on database startup in db.py
 
     if not credentials:
+        # If no credentials, fall back to default user
         return {"id": default_id, "email": default_email, "created_at": datetime.now(timezone.utc).isoformat()}
 
+    if credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication scheme",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
-        if credentials.scheme.lower() != "bearer":
-            return {"id": default_id, "email": default_email, "created_at": datetime.now(timezone.utc).isoformat()}
         payload = verify_access_token(credentials.credentials)
         sub_id = payload.get("sub")
         if not isinstance(sub_id, str):
-            return {"id": default_id, "email": default_email, "created_at": datetime.now(timezone.utc).isoformat()}
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         user = get_user_by_id(sub_id)
         if not user:
-            return {"id": default_id, "email": default_email, "created_at": datetime.now(timezone.utc).isoformat()}
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return user
-    except Exception:
-        return {"id": default_id, "email": default_email, "created_at": datetime.now(timezone.utc).isoformat()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Could not validate credentials: {e}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )

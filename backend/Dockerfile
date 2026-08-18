@@ -13,7 +13,6 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY backend /app/backend
 COPY ml_models /app/ml_models
-COPY queue_system /app/queue_system
 
 EXPOSE 8000
 

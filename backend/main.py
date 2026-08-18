@@ -8,6 +8,8 @@ from backend.services.queue_manager import queue_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from backend.services.db import initialize_database
+    initialize_database()
     await queue_manager.start()
     yield
     await queue_manager.stop()
