@@ -14,11 +14,7 @@ users_col = db["users"]
 jobs_col = db["jobs"]
 fs = gridfs.GridFS(db)
 
-# Initialize indexes
-users_col.create_index("id", unique=True)
-users_col.create_index("email", unique=True)
-jobs_col.create_index("job_id", unique=True)
-jobs_col.create_index("user_id")
+# Indexes will be initialized in initialize_database() to prevent startup/import crashes
 
 
 def save_file(data: bytes, filename: str) -> str:
@@ -58,5 +54,52 @@ def delete_file(path_or_id: str) -> None:
 
 
 def initialize_database() -> None:
-    """No-op placeholder for backward compatibility."""
-    pass
+    """Initialize indexes on the collection."""
+    try:
+        # 1. Clean up duplicate default user IDs if any exist
+        default_id = "default_user_sachin9666"
+        default_docs = list(users_col.find({"id": default_id}))
+        if len(default_docs) > 1:
+            print(f"Cleaning up {len(default_docs) - 1} duplicate default user records...")
+            keep_id = default_docs[0]["_id"]
+            users_col.delete_many({"id": default_id, "_id": {"$ne": keep_id}})
+
+        # 2. Clean up duplicate emails (group by email and delete duplicates to allow unique index creation)
+        pipeline = [
+            {"$group": {"_id": "$email", "count": {"$sum": 1}, "ids": {"$push": "$_id"}}},
+            {"$match": {"count": {"$gt": 1}}}
+        ]
+        duplicates = list(users_col.aggregate(pipeline))
+        for dup in duplicates:
+            email = dup["_id"]
+            if email:
+                print(f"Cleaning up duplicate entries for email: {email}")
+                keep_id = dup["ids"][0]
+                users_col.delete_many({"email": email, "_id": {"$ne": keep_id}})
+
+        # 3. Create unique indexes
+        users_col.create_index("id", unique=True)
+        users_col.create_index("email", unique=True)
+        jobs_col.create_index("job_id", unique=True)
+        jobs_col.create_index("user_id")
+
+        # 4. Ensure default user exists
+        default_email = "sachin9666@example.com"
+        doc = users_col.find_one({"id": default_id})
+        if not doc:
+            from datetime import datetime, timezone
+            from backend.security.password import hash_password
+            salt = "default_salt"
+            password_hash = hash_password("password123", salt)
+            users_col.insert_one({
+                "id": default_id,
+                "email": default_email,
+                "password_hash": password_hash,
+                "salt": salt,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+            print("Default user created successfully.")
+
+        print("Database indexes initialized successfully.")
+    except Exception as e:
+        print(f"Warning: Could not initialize database indexes: {e}")
